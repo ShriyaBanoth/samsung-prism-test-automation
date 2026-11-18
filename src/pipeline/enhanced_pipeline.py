@@ -1,0 +1,467 @@
+"""Enhanced end‑to‑end test generation pipeline.
+
+This module provides a higher‑level orchestration entry point that:
+
+- Accepts either a Jira issue key or a GitHub PR URL
+- Runs the core Jira → AI → Validator → Zephyr pipeline
+- Generates automation code (Playwright/Nightwatch/Cypress)
+- Optionally executes the generated tests
+- Records metrics for dashboards
+"""
+
+from __future__ import annotations
+
+import sys
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+import argparse
+import asyncio
+import io
+import logging
+import os
+from typing import Any, Dict, List, Optional
+
+from dotenv import load_dotenv
+from src.reporting.run_summary import generate_and_open_summary
+load_dotenv(override=True)
+
+
+from src.collector.pr_collector import PRCollector
+from src.dashboard.metrics_tracker import MetricsTracker
+from src.executor.test_executor import TestExecutor
+from src.pipeline.pipeline_runner import run_pipeline
+from src.codegen.automation_generator import AutomationGenerator
+from src.feedback.feedback_store import FeedbackStore, TestFeedback
+from src.integrations.zephyr_client import ZephyrClient
+from src.utils.pii_masker import mask_pii
+from datetime import datetime
+from dataclasses import asdict
+import json
+
+
+logger = logging.getLogger(__name__)
+
+
+def _normalize_status(raw: Any) -> str:
+    """Map any executor status onto the per_test contract vocabulary.
+
+    Returns one of: 'Pass' | 'Fail' | 'Skip' | 'Not Executed'
+    """
+    if raw is None:
+        return "Not Executed"
+    val = str(raw).strip().lower()
+    if val in {"passed", "pass", "ok"}:
+        return "Pass"
+    elif val in {"failed", "fail", "timedout", "interrupted", "error"}:
+        return "Fail"
+    elif val in {"skipped", "skip"}:
+        return "Skip"
+    return "Not Executed"
+
+
+async def run_enhanced_pipeline_async(
+    source: str,  # 'jira' or 'github_pr'
+    identifier: str,  # Jira issue key or GitHub PR URL
+    framework: str = "playwright",
+    team: Optional[str] = None,
+    max_ai_retries: int = 3,
+    retry_delay_seconds: float = 2.0,
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    """Run the enhanced test generation pipeline asynchronously.
+
+    Parameters
+    ----------
+    source:
+        'jira' or 'github_pr'
+    identifier:
+        Jira issue key (e.g. ZT-123) or GitHub PR URL
+    framework:
+        Target automation framework: playwright, nightwatch, or cypress
+    max_ai_retries:
+        Maximum AI generation retries (passed through to core pipeline)
+    retry_delay_seconds:
+        Delay between AI retries
+    dry_run:
+        When True, Zephyr operations run in mock mode via ZEPHYR_DRY_RUN.
+    """
+
+    logger.info("=== Starting Enhanced Prism Pipeline ===")
+    if team:
+        logger.info("Team context: %s", team)
+
+    # Honour dry‑run flag for Zephyr integration
+    if dry_run:
+        os.environ["ZEPHYR_DRY_RUN"] = "true"
+
+    def _resolve_issue_key(single_identifier: str) -> Any:
+        if source == "jira":
+            return single_identifier
+        elif source == "github_pr":
+            pr_collector = PRCollector()
+            pr_data = pr_collector.process_pr_url(single_identifier)
+            ikey = pr_data.get("issue_key")
+            if ikey:
+                logger.info("Resolved PR %s to Jira issue key %s", single_identifier, ikey)
+                return ikey
+            else:
+                # No Jira key in PR — auto-create a Jira story from PR title + ACs
+                logger.info("PR %s has no Jira key — auto-creating a Jira story...", single_identifier)
+                from src.integrations.jira_client import JiraClient
+                jira = JiraClient()
+                # Parse acceptance criteria from PR body bullet points
+                body = pr_data.get("description", "") or ""
+                ac_lines = [
+                    line.lstrip("-•* ").strip()
+                    for line in body.splitlines()
+                    if line.strip().startswith(("-", "•", "*")) and len(line.strip()) > 2
+                ]
+                pr_title = pr_data.get("title", "GitHub PR") or "GitHub PR"
+                # Extract PR number for labelling
+                try:
+                    pr_number = single_identifier.rstrip("/").split("/")[-1]
+                    pr_label = f"PR #{pr_number}"
+                except Exception:
+                    pr_label = "GitHub PR"
+                # Include PR reference in summary and description
+                summary_with_pr = f"[{pr_label}] {pr_title}"
+                description_with_pr = f"Auto-created from GitHub {pr_label}: {single_identifier}\n\n{body}"
+                ikey = jira.create_issue(
+                    summary=summary_with_pr,
+                    description=description_with_pr,
+                    acceptance_criteria=ac_lines,
+                )
+                logger.info("Auto-created Jira story %s for %s", ikey, pr_label)
+                return ikey  # proceed exactly like a Jira-triggered run
+        elif source == "api_spec":
+            from src.collector.spec_collector import SpecCollector
+            spec_collector = SpecCollector()
+            if single_identifier.startswith("http"):
+                spec_data = spec_collector.process_spec_url(single_identifier)
+            else:
+                spec_data = spec_collector.process_spec_file(single_identifier)
+            ikey = spec_data.get("issue_key") or f"SPEC-{abs(hash(single_identifier))}"
+            logger.info("Resolved spec %s to issue key %s", single_identifier, ikey)
+            return ikey, spec_data  # ← return tuple now
+        else:
+            raise ValueError(f"Unsupported source: {source}")
+
+    # Support batch processing of multiple Jira IDs in a simple way:
+    identifiers: List[str]
+    if source == "jira" and "," in identifier:
+        identifiers = [part.strip() for part in identifier.split(",") if part.strip()]
+        logger.info("Batch mode: processing %d Jira issues", len(identifiers))
+    else:
+        identifiers = [identifier]
+
+    all_results: List[Dict[str, Any]] = []
+
+    for single_identifier in identifiers:
+        resolved = _resolve_issue_key(single_identifier)
+        issue_key, spec_data = resolved if isinstance(resolved, tuple) else (resolved, None)
+        core_result = run_pipeline(
+            issue_key=issue_key,
+            max_ai_retries=max_ai_retries,
+            retry_delay_seconds=retry_delay_seconds,
+            skip_zephyr=False,
+            requirements=spec_data,
+            framework=framework,  # ← add this
+)
+
+        if source == "github_pr":
+            test_files = [
+                r["file_path"]
+                for r in core_result.get("automation_results", [])  # ← use core_result
+                if r.get("status") == "generated"
+            ]
+            if test_files:
+                PRCollector().push_generated_tests(single_identifier, test_files)
+                logger.info("Pushed %d test files to PR branch", len(test_files))
+
+            # Report Zephyr + execution results as a CI-style commit status on the PR
+            try:
+                zephyr_rows = core_result.get("zephyr_publish_results", []) or []
+                exec_res = core_result.get("execution_results", {}) or {}
+                num_published = sum(1 for r in zephyr_rows if r.get("status") in {"live", "demo"})
+                total_ex = exec_res.get("total_tests", 0)
+                passed_ex = exec_res.get("passed", 0)
+                failed_ex = exec_res.get("failed", 0)
+
+                if failed_ex > 0:
+                    status_state = "failure"
+                elif total_ex > 0:
+                    status_state = "success"
+                else:
+                    status_state = "success"  # published but nothing executed yet
+
+                desc = f"Zephyr: {num_published} case(s) published"
+                if total_ex:
+                    desc += f" | Tests: {passed_ex}/{total_ex} passed"
+
+                jira_base = os.getenv("JIRA_BASE_URL", "").rstrip("/")
+                target_url = f"{jira_base}/browse/{issue_key}" if jira_base else None
+
+                PRCollector().report_status(
+                    pr_url=single_identifier,
+                    state=status_state,
+                    description=desc,
+                    target_url=target_url,
+                )
+                logger.info("Posted commit status to PR %s: %s (%s)", single_identifier, status_state, desc)
+
+                # Add the PR as a Web Link on the Zephyr test cycle itself
+                if zephyr_rows:
+                    cycle_key = zephyr_rows[0].get("cycle_key")
+                    if cycle_key:
+                        added = ZephyrClient().add_pr_weblink(cycle_key, single_identifier)
+                        if added:
+                            logger.info("Added PR weblink to Zephyr cycle %s", cycle_key)
+                        else:
+                            logger.warning("Failed to add PR weblink to Zephyr cycle %s", cycle_key)
+            except Exception as exc:
+                logger.warning("Could not post commit status to PR %s: %s", single_identifier, exc)
+
+        generated_cases: List[Dict[str, Any]] = core_result.get("generated_test_cases", [])
+        validated_cases: List[Dict[str, Any]] = core_result.get("validated_test_cases", []) or generated_cases
+
+        # Steps 2 & 3 already handled by pipeline_runner (codegen + execution)
+        automation_results: List[Dict[str, Any]] = core_result.get("automation_results", [])
+        execution_results: Dict[str, Any] = core_result.get("execution_results", {})
+
+        # ------------------------------------------------------------------
+        # 4) Feedback resolution and collection (per_test contract)
+        # ------------------------------------------------------------------
+        feedback_entries: List[Dict[str, Any]] = []
+        if execution_results:
+            store = FeedbackStore()
+            # Consume per_test list per shared contract, with fallback to legacy test_results
+            per_test_items = execution_results.get("per_test")
+            if per_test_items is None:
+                per_test_items = []
+                for tr in execution_results.get("test_results", []):
+                    st = tr.get("status", "")
+                    norm_st = "Fail" if st in {"failed", "error"} else ("Pass" if st == "passed" else st)
+                    per_test_items.append({
+                        "test_case_id": tr.get("test_name", tr.get("test_file", "unknown")),
+                        "title": tr.get("test_name", "Test Case"),
+                        "status": norm_st,
+                        "duration_ms": 0,
+                        "error": tr.get("error", tr.get("stderr", "")),
+                    })
+
+            for item in per_test_items:
+                tc_id = item.get("test_case_id") or item.get("title") or "unknown"
+                status = _normalize_status(item.get("status"))
+
+                if status == "Pass":
+                    try:
+                        store.mark_resolved(tc_id)
+                    except Exception as exc:
+                        logger.warning("Failed to mark feedback resolved for %s: %s", tc_id, exc)
+                elif status == "Fail":
+                    err_msg = item.get("error") or item.get("error_message") or f"Test {tc_id} failed execution"
+                    item_title = item.get("title") or ""
+                    fb = TestFeedback(
+                        test_case_id=tc_id,
+                        issue_key=issue_key,
+                        error_message=mask_pii(str(err_msg)),
+                        test_steps=[],
+                        timestamp=datetime.now().isoformat(),
+                        title=item_title,
+                    )
+                    try:
+                        store.add_feedback(fb)
+                        feedback_entries.append(asdict(fb))
+                    except Exception as exc:
+                        logger.warning("Failed to record feedback for %s: %s", tc_id, exc)
+
+            if feedback_entries:
+                logger.info("Feedback recorded for AI improvement (%d entries)", len(feedback_entries))
+
+        # ------------------------------------------------------------------
+        # 5) Metrics for dashboards
+        # ------------------------------------------------------------------
+        tracker = MetricsTracker()
+        tracker.record_test_generation(issue_key, generated_cases, generation_time=0.0)
+        if execution_results:
+            tracker.record_execution_metrics(issue_key, execution_results)
+
+        enhanced_result: Dict[str, Any] = {
+            "issue_key": issue_key,
+            "source": source,
+            "team": team,
+            "core_pipeline": core_result,
+            "automation": automation_results,
+            "execution": execution_results,
+            "feedback": feedback_entries,
+        }
+
+        logger.info(
+            "Enhanced pipeline finished for %s: %d generated -> %d validated -> %d tests executed",
+            issue_key,
+            len(generated_cases),
+            len(validated_cases),
+            len(automation_results),
+        )
+
+        all_results.append(enhanced_result)
+
+    # Generate dashboard metrics JSON for all runs
+    tracker = MetricsTracker()
+    dashboard_data = tracker.generate_dashboard_data()
+    os.makedirs("data", exist_ok=True)
+    dashboard_path = os.path.join("data", "dashboard_data.json")
+    with open(dashboard_path, "w", encoding="utf-8") as f:
+        json.dump(dashboard_data, f, indent=2, ensure_ascii=False)
+    logger.info("Dashboard data written to %s", dashboard_path)
+
+    # If only one result, return it directly for backward compatibility
+    return all_results[0] if len(all_results) == 1 else {"batch_results": all_results}
+
+
+def _configure_utf8_console_logging(level: int = logging.INFO) -> None:
+    """Configure logging so it never crashes on non-ASCII characters.
+
+    Windows consoles default to a legacy code page (e.g. cp1252) which
+    cannot encode characters like non-breaking hyphens (\\u2011) that
+    AI-generated test case names sometimes contain. This wraps stdout/
+    stderr in UTF-8 text wrappers and points the root logger's handler
+    at the wrapped stream, avoiding UnicodeEncodeError during logging.
+    """
+    # Re-wrap stdout/stderr as UTF-8 (safe to call even if already wrapped).
+    try:
+        if not isinstance(sys.stdout, io.TextIOWrapper) or sys.stdout.encoding.lower() != "utf-8":
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+        if not isinstance(sys.stderr, io.TextIOWrapper) or sys.stderr.encoding.lower() != "utf-8":
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        # Fallback for environments where stdout/stderr have no .buffer
+        # (e.g. some IDEs or redirected streams) — reconfigure if possible.
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+    if not logging.getLogger().handlers:
+        logging.basicConfig(
+            level=level,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            handlers=[logging.StreamHandler(sys.stdout)],
+        )
+
+
+def main(argv: Optional[List[str]] = None) -> None:
+    """CLI entry point for the enhanced pipeline.
+
+    Examples
+    --------
+    Jira issue:
+        python -m src.pipeline.enhanced_pipeline jira ZT-123 --framework playwright
+
+    GitHub PR:
+        python -m src.pipeline.enhanced_pipeline github_pr https://github.com/org/repo/pull/123
+    """
+
+    parser = argparse.ArgumentParser(description="Run enhanced AI test generation pipeline")
+    parser.add_argument("source", choices=["jira", "github_pr","api_spec"], help="Input source type")
+    parser.add_argument("identifier", help="Jira issue key or GitHub PR URL")
+    parser.add_argument(
+        "--framework",
+        default="playwright",
+        choices=["playwright", "nightwatch", "cypress","gherkin"],
+        help="Target automation framework (default: playwright)",
+    )
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=int(os.getenv("MAX_AI_RETRIES", "3")),
+        help="Maximum AI generation retry attempts (default: 3)",
+    )
+    parser.add_argument(
+        "--retry-delay",
+        type=float,
+        default=float(os.getenv("AI_RETRY_DELAY_SECONDS", "2.0")),
+        help="Delay between AI retries in seconds (default: 2.0)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Run without making real Zephyr API calls (forces ZEPHYR_DRY_RUN=true)",
+    )
+    parser.add_argument(
+        "--team",
+        help="Optional team name for tagging runs (also honoured from TEAM_NAME env)",
+    )
+
+    args = parser.parse_args(argv)
+
+    # Ensure UTF-8-safe logging is configured (fixes UnicodeEncodeError on
+    # Windows consoles for non-ASCII characters like \u2011).
+    _configure_utf8_console_logging()
+
+    team = args.team or os.getenv("TEAM_NAME")
+
+    result = asyncio.run(
+        run_enhanced_pipeline_async(
+            source=args.source,
+            identifier=args.identifier,
+            framework=args.framework,
+            max_ai_retries=args.max_retries,
+            retry_delay_seconds=args.retry_delay,
+            dry_run=args.dry_run,
+            team=team,
+        )
+    )
+
+    if "batch_results" in result:
+        batch = result["batch_results"]
+        print("\n=== ENHANCED PIPELINE SUMMARY (BATCH) ===")
+        print(f"Issues processed: {len(batch)}")
+        total_gen = total_val_out = total_val_in = total_z = total_auto = 0
+        total_exec = total_pass = total_fail = 0
+        for item in batch:
+            c = item.get("core_pipeline") or {}
+            total_gen += len(c.get("generated_test_cases", []))
+            st = c.get("validation_stats") or {}
+            total_val_out += st.get("total_output", 0)
+            total_val_in += st.get("total_input", 0)
+            total_z += len(c.get("zephyr_publish_results", []))
+            total_auto += len(item.get("automation") or [])
+            ex = item.get("execution") or {}
+            total_exec += ex.get("total_tests", 0)
+            total_pass += ex.get("passed", 0)
+            total_fail += ex.get("failed", 0)
+        print(f"Generated (total): {total_gen}")
+        print(f"Validated (total): {total_val_out} / {total_val_in}")
+        print(f"Zephyr published (total): {total_z}")
+        print(f"Automation files (total): {total_auto}")
+        print(f"Executed tests (total): {total_exec} (passed={total_pass}, failed={total_fail})")
+
+        path = generate_and_open_summary(result)
+        print(f"\nDetailed run summary opened in browser: {path}")
+    else:
+        core = result.get("core_pipeline", {})
+        execution = result.get("execution") or {}
+
+        print("\n=== ENHANCED PIPELINE SUMMARY ===")
+        print(f"Issue: {result.get('issue_key')}")
+        print(f"Source: {result.get('source')}")
+        print(f"Generated: {len(core.get('generated_test_cases', []))}")
+        stats = core.get("validation_stats") or {}
+        print(f"Validated: {stats.get('total_output', 0)} / {stats.get('total_input', 0)}")
+        print(f"Zephyr published (demo/live): {len(core.get('zephyr_publish_results', []))}")
+        print(f"Automation files: {len(result.get('automation') or [])}")
+        if execution:
+            print(
+                f"Executed tests: {execution.get('total_tests', 0)} "
+                f"(passed={execution.get('passed', 0)}, failed={execution.get('failed', 0)})"
+            )
+
+        path = generate_and_open_summary(result)
+        print(f"\nDetailed run summary opened in browser: {path}")
+
+
+if __name__ == "__main__":  # pragma: no cover
+    main()

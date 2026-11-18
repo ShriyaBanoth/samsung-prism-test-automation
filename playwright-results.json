@@ -1,0 +1,478 @@
+{
+  "config": {
+    "configFile": "D:\\Prism_Main\\Prism-main\\playwright.config.js",
+    "rootDir": "D:/Prism_Main/Prism-main/generated_tests",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 6
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "D:/Prism_Main/Prism-main/test-results",
+        "repeatEach": 1,
+        "retries": 1,
+        "metadata": {
+          "actualWorkers": 6
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "D:/Prism_Main/Prism-main/generated_tests",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.58.2",
+    "workers": 6,
+    "webServer": {
+      "command": "node mock-server.js",
+      "url": "http://localhost:3000",
+      "reuseExistingServer": false,
+      "timeout": 10000
+    }
+  },
+  "suites": [
+    {
+      "title": "ZT-52_ZT-52-RB-001.spec.js",
+      "file": "ZT-52_ZT-52-RB-001.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "ZT-52: Successful behaviour: system accepts valid scenario for User",
+          "file": "ZT-52_ZT-52-RB-001.spec.js",
+          "line": 9,
+          "column": 6,
+          "specs": [
+            {
+              "title": "Successful behaviour: system accepts valid scenario for User should see dots or ",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1680,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-08-25T12:41:34.399Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "5ab500347325dca3f5c7-c8a1201627cddce09d02",
+              "file": "ZT-52_ZT-52-RB-001.spec.js",
+              "line": 16,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "ZT-52_ZT-52-RB-002.spec.js",
+      "file": "ZT-52_ZT-52-RB-002.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "ZT-52: Failure handling: system rejects invalid or unauthorised sce",
+          "file": "ZT-52_ZT-52-RB-002.spec.js",
+          "line": 9,
+          "column": 6,
+          "specs": [
+            {
+              "title": "Failure handling: system rejects invalid or unauthorised scenario for User shoul",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 1690,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-08-25T12:41:34.420Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "33cf6f34e12608e3144b-d4587fb91e4a4a3a78b7",
+              "file": "ZT-52_ZT-52-RB-002.spec.js",
+              "line": 16,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "ZT-52_ZT-52-RB-003.spec.js",
+      "file": "ZT-52_ZT-52-RB-003.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "ZT-52: Boundary conditions: limits and edge cases covered for User ",
+          "file": "ZT-52_ZT-52-RB-003.spec.js",
+          "line": 9,
+          "column": 6,
+          "specs": [
+            {
+              "title": "Boundary conditions: limits and edge cases covered for User should see dots or a",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 1959,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-08-25T12:41:34.471Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "a5ec964e73c13b70a59f-555893bf71850630555b",
+              "file": "ZT-52_ZT-52-RB-003.spec.js",
+              "line": 16,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "ZT-52_ZT-52-RB-004.spec.js",
+      "file": "ZT-52_ZT-52-RB-004.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "ZT-52: Risk verification: system prevents security vulnerabilities ",
+          "file": "ZT-52_ZT-52-RB-004.spec.js",
+          "line": 9,
+          "column": 6,
+          "specs": [
+            {
+              "title": "Risk verification: system prevents security vulnerabilities or logical failures ",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 1755,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-08-25T12:41:34.470Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "643068de59fff4cc4ffc-3346df0c9d42e61e832b",
+              "file": "ZT-52_ZT-52-RB-004.spec.js",
+              "line": 16,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "ZT-52_ZT-52-RB-005.spec.js",
+      "file": "ZT-52_ZT-52-RB-005.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "ZT-52: Successful behaviour: system accepts valid scenario for Pass",
+          "file": "ZT-52_ZT-52-RB-005.spec.js",
+          "line": 9,
+          "column": 6,
+          "specs": [
+            {
+              "title": "Successful behaviour: system accepts valid scenario for Password value should ne",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 4,
+                      "status": "passed",
+                      "duration": 1624,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-08-25T12:41:34.499Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "e4a31b6ab1f9d47339c7-ccb4c53234e1ae52a008",
+              "file": "ZT-52_ZT-52-RB-005.spec.js",
+              "line": 16,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "ZT-52_ZT-52-RB-006.spec.js",
+      "file": "ZT-52_ZT-52-RB-006.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "ZT-52: Failure handling: system rejects invalid or unauthorised sce",
+          "file": "ZT-52_ZT-52-RB-006.spec.js",
+          "line": 9,
+          "column": 6,
+          "specs": [
+            {
+              "title": "Failure handling: system rejects invalid or unauthorised scenario for Password v",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 1819,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-08-25T12:41:34.494Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "7e6b434c9d795f863ff7-92a83c8b9f81e24a890f",
+              "file": "ZT-52_ZT-52-RB-006.spec.js",
+              "line": 16,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "ZT-52_ZT-52-RB-007.spec.js",
+      "file": "ZT-52_ZT-52-RB-007.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "ZT-52: Boundary conditions: limits and edge cases covered for Passw",
+          "file": "ZT-52_ZT-52-RB-007.spec.js",
+          "line": 9,
+          "column": 6,
+          "specs": [
+            {
+              "title": "Boundary conditions: limits and edge cases covered for Password value should nev",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 4,
+                      "status": "passed",
+                      "duration": 408,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-08-25T12:41:36.558Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "b2bfc88155435bf6f844-fac7362fc4678aacb18d",
+              "file": "ZT-52_ZT-52-RB-007.spec.js",
+              "line": 16,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "ZT-52_ZT-52-RB-008.spec.js",
+      "file": "ZT-52_ZT-52-RB-008.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "ZT-52: Risk verification: system prevents security vulnerabilities ",
+          "file": "ZT-52_ZT-52-RB-008.spec.js",
+          "line": 9,
+          "column": 6,
+          "specs": [
+            {
+              "title": "Risk verification: system prevents security vulnerabilities or logical failures ",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 338,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-08-25T12:41:36.558Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "bc217d7614844168f9de-82485d762ce1818ff3fb",
+              "file": "ZT-52_ZT-52-RB-008.spec.js",
+              "line": 16,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-08-25T12:41:30.301Z",
+    "duration": 7046.445,
+    "expected": 8,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}
